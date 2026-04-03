@@ -2,6 +2,8 @@
 
 Quick Question for LLM
 
+Japanese README: [README.ja.md](./README.ja.md)
+
 `qql` is a small CLI tool for sending short questions to LLMs from the terminal.
 
 ## Features
