@@ -444,6 +444,31 @@ fn last_reads_history_without_calling_provider() {
 }
 
 #[test]
+fn missing_config_suggests_running_init() {
+    let dir = tempdir().unwrap();
+    let mut init_ui = NoopInitUi;
+    let model_catalog = NoopModelCatalog;
+    let factory = MockFactory::default();
+
+    let error = run(
+        Cli {
+            command: None,
+            question: Some("what is LLM?".to_owned()),
+            providers: vec![],
+            last: false,
+        },
+        &AppPaths::from_base_dir(dir.path()),
+        &factory,
+        &FixedClock,
+        &mut init_ui,
+        &model_catalog,
+    )
+    .unwrap_err();
+
+    assert!(error.to_string().contains("Run `qql init` to create it."));
+}
+
+#[test]
 fn init_interactively_creates_config_for_selected_providers() {
     let dir = tempdir().unwrap();
     let factory = MockFactory::default();

@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
@@ -86,8 +87,19 @@ impl Config {
     }
 
     pub fn load_from_path(path: &Path) -> Result<Self> {
-        let raw = fs::read_to_string(path)
-            .with_context(|| format!("failed to read config file: {}", path.display()))?;
+        let raw = match fs::read_to_string(path) {
+            Ok(raw) => raw,
+            Err(error) if error.kind() == ErrorKind::NotFound => {
+                return Err(anyhow!(
+                    "failed to read config file: {}. Run `qql init` to create it.",
+                    path.display()
+                ));
+            }
+            Err(error) => {
+                return Err(error)
+                    .with_context(|| format!("failed to read config file: {}", path.display()));
+            }
+        };
         let config: Self = serde_json::from_str(&raw)
             .with_context(|| format!("failed to parse config file: {}", path.display()))?;
         config.validate()?;
