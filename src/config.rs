@@ -73,10 +73,6 @@ impl AppPaths {
 
 impl Config {
     pub fn write_to_path(path: &Path, config: &Self) -> Result<()> {
-        if path.exists() {
-            return Err(anyhow!("config file already exists: {}", path.display()));
-        }
-
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).with_context(|| {
                 format!("failed to create config directory: {}", parent.display())

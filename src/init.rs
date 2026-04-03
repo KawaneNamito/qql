@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{Context, Result, anyhow};
-use dialoguer::{Input, MultiSelect, Select, theme::ColorfulTheme};
+use dialoguer::{Confirm, Input, MultiSelect, Select, theme::ColorfulTheme};
 use serde::Deserialize;
 
 use crate::config::{Config, ProviderConfig, ProviderKind};
@@ -14,6 +14,7 @@ pub enum ModelSelection {
 }
 
 pub trait InitUi {
+    fn confirm_overwrite(&mut self, path: &Path) -> Result<bool>;
     fn select_providers(&mut self, available: &[ProviderKind]) -> Result<Vec<ProviderKind>>;
     fn input_api_key(&mut self, provider: ProviderKind) -> Result<String>;
     fn select_model(
@@ -43,6 +44,16 @@ impl Default for DialoguerInitUi {
 }
 
 impl InitUi for DialoguerInitUi {
+    fn confirm_overwrite(&mut self, path: &Path) -> Result<bool> {
+        Ok(Confirm::with_theme(&Self::theme())
+            .with_prompt(format!(
+                "Config file already exists at {}. Overwrite?",
+                path.display()
+            ))
+            .default(false)
+            .interact()?)
+    }
+
     fn select_providers(&mut self, available: &[ProviderKind]) -> Result<Vec<ProviderKind>> {
         let items = available
             .iter()
@@ -112,8 +123,8 @@ impl ModelCatalog for RealModelCatalog {
 }
 
 pub fn run_init(path: &Path, ui: &mut dyn InitUi, catalog: &dyn ModelCatalog) -> Result<String> {
-    if path.exists() {
-        return Err(anyhow!("config file already exists: {}", path.display()));
+    if path.exists() && !ui.confirm_overwrite(path)? {
+        return Err(anyhow!("init aborted"));
     }
     let config = build_config(ui, catalog)?;
     Config::write_to_path(path, &config)?;

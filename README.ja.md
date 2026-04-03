@@ -38,6 +38,7 @@ cargo build --release
 - API key の貼り付け
 - 利用可能モデル一覧からの選択
 - 一覧にない場合の custom model 入力
+- 既存設定ファイルがある場合の上書き確認
 
 モデル一覧は入力した API key を使って実行時に取得します。取得に失敗した場合は、内蔵の候補一覧にフォールバックします。
 
@@ -84,6 +85,40 @@ LLM stands for Large Language Model.
   "claude": "LLM stands for ..."
 }
 ```
+
+複数 provider の JSON 出力や単一 provider の Markdown を見やすく表示したい場合は、`qql` をラップする `qq` 関数を用意しておくと便利です。
+
+```sh
+qq() {
+  local output markdown
+  output="$(qql "$@")" || return $?
+
+  if printf '%s' "$output" | jq -e 'type == "object"' >/dev/null 2>&1; then
+    markdown="$(
+      printf '%s' "$output" \
+        | jq -r '
+            to_entries
+            | map("# \(.key)\n\n\(.value)")
+            | join("\n\n---\n\n")
+          '
+    )"
+  else
+    markdown="$output"
+  fi
+
+  printf '%s\n' "$markdown" | glow -p
+}
+```
+
+この関数を `~/.zshrc` や `~/.bashrc` に追加してシェルを読み直すと、次のように使えます。
+
+```sh
+qq "what is LLM?"
+qq -p openai -p claude "what is LLM?"
+qq --last
+```
+
+複数 provider の場合でも `glow` は 1 回だけ起動するため、1 つの画面で連続スクロールしながら比較できます。
 
 ## 設定ファイル
 

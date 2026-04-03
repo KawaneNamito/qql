@@ -78,6 +78,10 @@ impl Clock for FixedClock {
 struct NoopInitUi;
 
 impl InitUi for NoopInitUi {
+    fn confirm_overwrite(&mut self, _path: &std::path::Path) -> Result<bool> {
+        unreachable!("init UI should not be used in this test")
+    }
+
     fn select_providers(&mut self, _available: &[ProviderKind]) -> Result<Vec<ProviderKind>> {
         unreachable!("init UI should not be used in this test")
     }
@@ -108,6 +112,7 @@ impl ModelCatalog for NoopModelCatalog {
 }
 
 struct MockInitUi {
+    overwrite_confirmation: Option<bool>,
     providers: Vec<ProviderKind>,
     api_keys: HashMap<ProviderKind, String>,
     models: HashMap<ProviderKind, ModelSelection>,
@@ -118,6 +123,7 @@ struct MockInitUi {
 impl MockInitUi {
     fn new(providers: Vec<ProviderKind>) -> Self {
         Self {
+            overwrite_confirmation: None,
             providers,
             api_keys: HashMap::new(),
             models: HashMap::new(),
@@ -141,12 +147,21 @@ impl MockInitUi {
         self
     }
 
+    fn with_overwrite_confirmation(mut self, confirmed: bool) -> Self {
+        self.overwrite_confirmation = Some(confirmed);
+        self
+    }
+
     fn offered_models(&self, provider: ProviderKind) -> Option<&Vec<String>> {
         self.offered_models.get(&provider)
     }
 }
 
 impl InitUi for MockInitUi {
+    fn confirm_overwrite(&mut self, _path: &std::path::Path) -> Result<bool> {
+        Ok(self.overwrite_confirmation.unwrap_or(false))
+    }
+
     fn select_providers(&mut self, _available: &[ProviderKind]) -> Result<Vec<ProviderKind>> {
         Ok(self.providers.clone())
     }
@@ -521,10 +536,17 @@ fn init_interactively_creates_config_for_selected_providers() {
 }
 
 #[test]
-fn init_fails_when_config_already_exists() {
+fn init_overwrites_existing_config_when_confirmed() {
     let dir = tempdir().unwrap();
-    let model_catalog = NoopModelCatalog;
-    let mut init_ui = NoopInitUi;
+    let model_catalog =
+        MockModelCatalog::default().with_models(ProviderKind::Openai, &["gpt-5-mini"]);
+    let mut init_ui = MockInitUi::new(vec![ProviderKind::Openai])
+        .with_overwrite_confirmation(true)
+        .with_api_key(ProviderKind::Openai, "sk-new")
+        .with_model(
+            ProviderKind::Openai,
+            ModelSelection::Preset("gpt-5-mini".to_owned()),
+        );
     write_config(
         dir.path(),
         r#"{
@@ -534,6 +556,46 @@ fn init_fails_when_config_already_exists() {
           }
         }"#,
     );
+    let factory = MockFactory::default();
+
+    let output = run(
+        Cli {
+            question: None,
+            providers: vec![],
+            last: false,
+            command: Some(Command::Init),
+        },
+        &AppPaths::from_base_dir(dir.path()),
+        &factory,
+        &FixedClock,
+        &mut init_ui,
+        &model_catalog,
+    )
+    .unwrap();
+
+    assert!(output.contains("Created config file"));
+    assert_eq!(factory.build_log().len(), 0);
+
+    let config: Config =
+        serde_json::from_str(&fs::read_to_string(dir.path().join("config.json")).unwrap()).unwrap();
+    assert_eq!(
+        config.providers.get(&ProviderKind::Openai).unwrap().api_key,
+        "sk-new"
+    );
+}
+
+#[test]
+fn init_aborts_when_overwrite_is_rejected() {
+    let dir = tempdir().unwrap();
+    let model_catalog = NoopModelCatalog;
+    let mut init_ui = MockInitUi::new(vec![]).with_overwrite_confirmation(false);
+    let original = r#"{
+      "default_providers": ["openai"],
+      "providers": {
+        "openai": { "api_key": "openai-key" }
+      }
+    }"#;
+    write_config(dir.path(), original);
     let factory = MockFactory::default();
 
     let error = run(
@@ -551,8 +613,12 @@ fn init_fails_when_config_already_exists() {
     )
     .unwrap_err();
 
-    assert!(error.to_string().contains("already exists"));
+    assert!(error.to_string().contains("aborted"));
     assert_eq!(factory.build_log().len(), 0);
+    assert_eq!(
+        fs::read_to_string(dir.path().join("config.json")).unwrap(),
+        original
+    );
 }
 
 #[test]
