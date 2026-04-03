@@ -7,7 +7,7 @@ use anyhow::{Result, anyhow};
 use qql::app::{Clock, run};
 use qql::cli::{Cli, Command};
 use qql::config::{AppPaths, Config, ProviderKind, ResolvedProviderConfig};
-use qql::history::{AnswerPayload, HistoryEntry};
+use qql::history::HistoryEntry;
 use qql::init::{InitUi, ModelCatalog, ModelSelection};
 use qql::provider::{Provider, ProviderFactory};
 use tempfile::tempdir;
@@ -272,7 +272,14 @@ fn uses_default_provider_and_persists_history() {
     )
     .unwrap();
 
-    assert_eq!(output, "LLM stands for large language model.");
+    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    assert_eq!(
+        parsed,
+        BTreeMap::from([(
+            "claude".to_owned(),
+            "LLM stands for large language model.".to_owned()
+        )])
+    );
     assert_eq!(
         factory.build_log(),
         vec![(
@@ -286,10 +293,7 @@ fn uses_default_provider_and_persists_history() {
 
     let history = read_history(dir.path());
     assert_eq!(history.question, "what is LLM?");
-    assert_eq!(
-        history.answer,
-        AnswerPayload::Single("LLM stands for large language model.".to_owned())
-    );
+    assert_eq!(history.answer, parsed);
     assert_eq!(history.providers, vec![ProviderKind::Claude]);
     assert_eq!(history.timestamp, "2026-04-03T12:00:00Z");
 }
@@ -344,7 +348,7 @@ fn emits_json_for_multiple_providers() {
     );
 
     let history = read_history(dir.path());
-    assert_eq!(history.answer, AnswerPayload::Multiple(parsed));
+    assert_eq!(history.answer, parsed);
 }
 
 #[test]
@@ -379,7 +383,11 @@ fn provider_flag_overrides_default_providers() {
     )
     .unwrap();
 
-    assert_eq!(output, "Gemini answer");
+    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    assert_eq!(
+        parsed,
+        BTreeMap::from([("gemini".to_owned(), "Gemini answer".to_owned())])
+    );
     assert_eq!(factory.build_log().len(), 1);
     assert_eq!(factory.build_log()[0].0, ProviderKind::Gemini);
 }

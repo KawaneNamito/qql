@@ -7,12 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::ProviderKind;
 
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(untagged)]
-pub enum AnswerPayload {
-    Single(String),
-    Multiple(BTreeMap<String, String>),
-}
+pub type AnswerPayload = BTreeMap<String, String>;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct HistoryEntry {
@@ -22,13 +17,8 @@ pub struct HistoryEntry {
     pub timestamp: String,
 }
 
-impl AnswerPayload {
-    pub fn render(&self) -> Result<String> {
-        match self {
-            Self::Single(text) => Ok(text.clone()),
-            Self::Multiple(map) => Ok(serde_json::to_string_pretty(map)?),
-        }
-    }
+pub fn render_answer(answer: &AnswerPayload) -> Result<String> {
+    Ok(serde_json::to_string_pretty(answer)?)
 }
 
 pub fn load_history(path: &Path) -> Result<HistoryEntry> {

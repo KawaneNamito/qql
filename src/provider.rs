@@ -31,8 +31,11 @@ pub fn ask_providers(
     }
 
     if providers.len() == 1 {
-        let (_, provider) = providers.into_iter().next().expect("checked len");
-        return Ok(AnswerPayload::Single(provider.ask(question)?));
+        let (kind, provider) = providers.into_iter().next().expect("checked len");
+        return Ok(BTreeMap::from([(
+            kind.as_str().to_owned(),
+            provider.ask(question)?,
+        )]));
     }
 
     let mut handles = Vec::new();
@@ -52,7 +55,7 @@ pub fn ask_providers(
         answers.insert(kind.as_str().to_owned(), answer);
     }
 
-    Ok(AnswerPayload::Multiple(answers))
+    Ok(answers)
 }
 
 pub struct RealProviderFactory;

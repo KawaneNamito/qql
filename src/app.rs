@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 
 use crate::cli::{Cli, Command};
 use crate::config::AppPaths;
-use crate::history::{HistoryEntry, load_history, save_history};
+use crate::history::{HistoryEntry, load_history, render_answer, save_history};
 use crate::init::{InitUi, ModelCatalog, run_init};
 use crate::provider::{ProviderFactory, ask_providers};
 
@@ -23,7 +23,7 @@ pub fn run(
     }
 
     if cli.last {
-        return load_history(&paths.history_path)?.answer.render();
+        return render_answer(&load_history(&paths.history_path)?.answer);
     }
 
     let question = cli
@@ -50,5 +50,5 @@ pub fn run(
         },
     )?;
 
-    answer.render()
+    render_answer(&answer)
 }
