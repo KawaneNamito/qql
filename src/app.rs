@@ -2,8 +2,8 @@ use anyhow::{Result, anyhow};
 
 use crate::cli::{Cli, Command};
 use crate::config::AppPaths;
-use crate::config::Config;
 use crate::history::{HistoryEntry, load_history, save_history};
+use crate::init::{InitUi, ModelCatalog, run_init};
 use crate::provider::{ProviderFactory, ask_providers};
 
 pub trait Clock {
@@ -15,13 +15,11 @@ pub fn run(
     paths: &AppPaths,
     factory: &dyn ProviderFactory,
     clock: &dyn Clock,
+    init_ui: &mut dyn InitUi,
+    model_catalog: &dyn ModelCatalog,
 ) -> Result<String> {
     if cli.command == Some(Command::Init) {
-        Config::init_file(&paths.config_path)?;
-        return Ok(format!(
-            "Created config file: {}",
-            paths.config_path.display()
-        ));
+        return run_init(&paths.config_path, init_ui, model_catalog);
     }
 
     if cli.last {
@@ -32,7 +30,7 @@ pub fn run(
         .question
         .filter(|question| !question.trim().is_empty())
         .ok_or_else(|| anyhow!("question is required unless --last is used"))?;
-    let config = Config::load_from_path(&paths.config_path)?;
+    let config = crate::config::Config::load_from_path(&paths.config_path)?;
     let providers_to_use = config.providers_to_use(&cli.providers)?;
 
     let mut providers = Vec::new();

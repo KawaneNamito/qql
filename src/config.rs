@@ -72,7 +72,7 @@ impl AppPaths {
 }
 
 impl Config {
-    pub fn init_file(path: &Path) -> Result<()> {
+    pub fn write_to_path(path: &Path, config: &Self) -> Result<()> {
         if path.exists() {
             return Err(anyhow!("config file already exists: {}", path.display()));
         }
@@ -83,7 +83,7 @@ impl Config {
             })?;
         }
 
-        let body = serde_json::to_string_pretty(&Self::template())?;
+        let body = serde_json::to_string_pretty(config)?;
         fs::write(path, format!("{body}\n"))
             .with_context(|| format!("failed to write config file: {}", path.display()))?;
         Ok(())
@@ -160,39 +160,13 @@ impl Config {
 
         Ok(())
     }
-
-    fn template() -> Self {
-        let mut providers = std::collections::BTreeMap::new();
-        providers.insert(
-            ProviderKind::Openai,
-            ProviderConfig {
-                api_key: "YOUR_OPENAI_API_KEY".to_owned(),
-                model: Some(ProviderKind::Openai.default_model().to_owned()),
-            },
-        );
-        providers.insert(
-            ProviderKind::Claude,
-            ProviderConfig {
-                api_key: "YOUR_CLAUDE_API_KEY".to_owned(),
-                model: Some(ProviderKind::Claude.default_model().to_owned()),
-            },
-        );
-        providers.insert(
-            ProviderKind::Gemini,
-            ProviderConfig {
-                api_key: "YOUR_GEMINI_API_KEY".to_owned(),
-                model: Some(ProviderKind::Gemini.default_model().to_owned()),
-            },
-        );
-
-        Self {
-            default_providers: vec![ProviderKind::Openai],
-            providers,
-        }
-    }
 }
 
 impl ProviderKind {
+    pub fn all() -> &'static [ProviderKind] {
+        &[Self::Openai, Self::Claude, Self::Gemini]
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Openai => "openai",
@@ -201,11 +175,42 @@ impl ProviderKind {
         }
     }
 
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::Openai => "OpenAI",
+            Self::Claude => "Claude",
+            Self::Gemini => "Gemini",
+        }
+    }
+
     pub fn default_model(self) -> &'static str {
         match self {
             Self::Openai => "gpt-4o-mini",
             Self::Claude => "claude-haiku-4-5",
             Self::Gemini => "gemini-2.0-flash",
+        }
+    }
+
+    pub fn init_models(self) -> &'static [&'static str] {
+        match self {
+            Self::Openai => &[
+                "gpt-5.2",
+                "gpt-5",
+                "gpt-5-mini",
+                "gpt-5.2-codex",
+                "gpt-4o-mini",
+            ],
+            Self::Claude => &[
+                "claude-sonnet-4-20250514",
+                "claude-opus-4-1-20250805",
+                "claude-3-5-haiku-latest",
+            ],
+            Self::Gemini => &[
+                "gemini-2.5-flash",
+                "gemini-2.5-flash-lite",
+                "gemini-2.5-pro",
+                "gemini-2.0-flash",
+            ],
         }
     }
 }
