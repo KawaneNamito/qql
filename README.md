@@ -2,9 +2,17 @@
 
 Quick Question for LLM
 
+![License](https://img.shields.io/badge/license-MIT-blue)
+![Rust](https://img.shields.io/badge/built_with-Rust-orange?logo=rust)
+![Providers](https://img.shields.io/badge/providers-OpenAI%20%7C%20Claude%20%7C%20Gemini-blueviolet)
+
 Japanese README: [README.ja.md](./README.ja.md)
 
 `qql` is a small CLI tool for sending short questions to LLMs from the terminal.
+
+Inspired by [llm](https://github.com/simonw/llm). I wanted a simpler, dependency-free alternative that outputs structured JSON and stays close to the metal.
+
+![demo](./docs/demo.gif)
 
 ## Features
 
@@ -14,21 +22,13 @@ Japanese README: [README.ja.md](./README.ja.md)
 - Replay the last answer with `--last`
 - Create the config file interactively with `qql init`
 
-## Build
+## Installation
 
 ```sh
 cargo build --release
 ```
 
-Generated binary:
-
-```sh
-./target/release/qql
-```
-
-## Quick Start
-
-Create your config on first run:
+Then run the generated binary:
 
 ```sh
 ./target/release/qql init
@@ -43,12 +43,6 @@ Create your config on first run:
 - Confirming overwrite if a config file already exists
 
 Model lists are fetched at runtime using the API key you enter. If fetching fails, `qql` falls back to a built-in model list.
-
-After that, you can ask a question directly:
-
-```sh
-./target/release/qql "what is LLM?"
-```
 
 ## Usage
 
@@ -73,20 +67,12 @@ qql --last
 
 ## Output
 
-Output is always JSON. Even a single-provider response is returned as an object keyed by provider name.
+Output is always JSON, keyed by provider name.
 
 ```json
 {
   "openai": "LLM is ...",
   "claude": "LLM stands for ..."
-}
-```
-
-Single-provider example:
-
-```json
-{
-  "claude": "LLM stands for Large Language Model."
 }
 ```
 
@@ -124,23 +110,12 @@ qq --last
 
 `glow` runs only once, so multi-provider responses can be compared in one continuous scrollable view.
 
-## Config Files
+## Config
 
-Config file:
+Config file: `~/.config/qql/config.json`  
+History file: `~/.config/qql/history.json`
 
-```txt
-~/.config/qql/config.json
-```
-
-If `$XDG_CONFIG_HOME` is set, `qql` follows the XDG Base Directory spec and uses that instead.
-
-History file:
-
-```txt
-~/.config/qql/history.json
-```
-
-## Example Config
+If `$XDG_CONFIG_HOME` is set, `qql` follows the XDG Base Directory spec.
 
 ```json
 {
@@ -160,9 +135,11 @@ History file:
 
 ## Supported Providers
 
-- `openai`
-- `claude`
-- `gemini`
+| Provider | Value |
+|---|---|
+| OpenAI | `openai` |
+| Claude (Anthropic) | `claude` |
+| Gemini (Google) | `gemini` |
 
 ## Development
 

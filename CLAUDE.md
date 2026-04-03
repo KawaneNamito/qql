@@ -8,24 +8,64 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```sh
 qql "what is LLM?"
+qql "質問" -p claude          # Providerを指定
+qql --last                    # 直前の回答を再出力（API呼び出しなし）
+qql init                      # インタラクティブな初期設定
 ```
 
-## 仕様
+## コマンド
 
-- API Provider: OpenAI / Claude / Gemini から選択可能
-- デフォルトProviderを設定できる（複数選択も可）
-  - 複数選択時はJSON形式 `{ <provider_name>: "message" }` で出力
-- オプションで直前の回答を再出力できる（API呼び出しなし）
-- 設定はJSON形式（APIキーを含む）
+```sh
+cargo build                   # ビルド
+cargo run -- "質問"           # 実行
+cargo test                    # テスト全件
+cargo test <test_name>        # 単一テスト
+cargo clippy                  # Lint
+```
 
-## 環境変数
+## アーキテクチャ
 
-| 環境変数 | 説明 |
-| --- | --- |
-| （README.ja.mdに未記載） | |
+処理フロー:
 
-## 実装時の注意
+```
+CLI引数 (cli.rs)
+  → app::run() (app.rs)
+    → qql init → init.rs（インタラクティブ設定生成）
+    → --last   → history.rs（ファイルから再出力）
+    → 通常質問 → config.rs（設定読み込み）
+               → provider.rs（Providerディスパッチ）
+                 ├── openai.rs / claude.rs / gemini.rs（API呼び出し）
+               → history.rs（結果保存）
+```
 
-- APIキーは設定ファイル（JSON）で管理する。環境変数との優先順位はREADME/仕様を確認。
-- 複数Provider指定時の出力形式: `{ "openai": "...", "claude": "..." }`
-- 「直前の回答の再出力」機能はキャッシュ/ログからAPI呼び出しなしで返す。
+### 各モジュールの役割
+
+- **`app.rs`** — メインロジック。`run()`関数がエントリポイント。依存をすべてtraitで受け取りテスト容易。
+- **`cli.rs`** — `clap`によるCLI引数定義。`Cli`構造体と`Command::Init`サブコマンド。
+- **`config.rs`** — `~/.config/qql/config.json`の読み書き。`Config`・`ProviderKind`・`AppPaths`を定義。`XDG_CONFIG_HOME`に対応。
+- **`provider.rs`** — `Provider` traitと`ProviderFactory` trait。複数Provider時は`std::thread`で並列呼び出し、結果を`BTreeMap<String, String>`に集約。
+- **`openai.rs` / `claude.rs` / `gemini.rs`** — 各APIの`Provider` trait実装。`ureq`で同期HTTP（tokio不要）。
+- **`history.rs`** — 直前の回答を`~/.config/qql/history.json`に保存・読み出し。`AnswerPayload = BTreeMap<String, String>`。
+- **`init.rs`** — `qql init`のインタラクティブUI。`InitUi` trait（`DialoguerInitUi`）と`ModelCatalog` trait（`RealModelCatalog`）を使用。初期化時にAPIを叩いてモデル一覧を取得し、失敗時はハードコードされたプリセットにフォールバック。
+
+### 出力形式
+
+- 単一Provider: `{ "openai": "..." }`（JSON）
+- 複数Provider: `{ "claude": "...", "openai": "..." }`（JSON、キーはアルファベット順）
+
+### 設定ファイル形式
+
+```json
+{
+  "default_providers": ["openai"],
+  "providers": {
+    "openai": { "api_key": "sk-...", "model": "gpt-4o-mini" },
+    "claude": { "api_key": "sk-ant-...", "model": "claude-haiku-4-5" }
+  }
+}
+```
+
+### テスト戦略
+
+- `app.rs`のテストは`InitUi`・`ProviderFactory`・`Clock`・`ModelCatalog`のtraitをモック実装して単体テスト。
+- `tempfile`クレートで一時ディレクトリを使用。
