@@ -16,7 +16,7 @@ use tempfile::tempdir;
 struct MockFactory {
     answers: Mutex<HashMap<ProviderKind, String>>,
     build_log: Mutex<Vec<(ProviderKind, ResolvedProviderConfig)>>,
-    ask_count: AtomicUsize,
+    ask_count: Arc<AtomicUsize>,
 }
 
 impl MockFactory {
@@ -62,7 +62,7 @@ impl ProviderFactory for MockFactory {
             .ok_or_else(|| anyhow!("missing mock answer"))?;
         Ok(Arc::new(MockProvider {
             answer,
-            ask_count: Arc::new(AtomicUsize::new(self.ask_count())),
+            ask_count: Arc::clone(&self.ask_count),
         }))
     }
 }
@@ -290,6 +290,7 @@ fn uses_default_provider_and_persists_history() {
             }
         )]
     );
+    assert_eq!(factory.ask_count(), 1);
 
     let history = read_history(dir.path());
     assert_eq!(history.question, "what is LLM?");
