@@ -16,7 +16,7 @@ Sleep 0.5s
 Show
 
 Type "qq --last"
-Sleep 3s
+Sleep 6s
 Enter
 Sleep 1s
 Down
