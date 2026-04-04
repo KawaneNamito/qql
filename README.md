@@ -118,6 +118,22 @@ qq() {
 }
 ```
 
+If you want to compose the question in your editor before passing it through `qq`, add a separate `qqe` helper:
+
+```sh
+qqe() {
+  local tmp editor question
+  tmp="$(mktemp)" || return 1
+  editor="${VISUAL:-${EDITOR:-vi}}"
+  "$editor" "$tmp" || { rm -f "$tmp"; return 1; }
+  question="$(cat "$tmp")"
+  rm -f "$tmp"
+
+  [ -n "$(printf '%s' "$question" | tr -d '[:space:]')" ] || return 1
+  qq "$question"
+}
+```
+
 Add it to `~/.zshrc` or `~/.bashrc`, reload your shell, and use:
 
 ```sh
@@ -125,6 +141,7 @@ qq "what is LLM?"
 qq -p openai -p claude "what is LLM?"
 qq --editor
 qq --stdin < prompt.md
+qqe
 qq --last
 ```
 
