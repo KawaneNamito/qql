@@ -63,6 +63,7 @@ Compose the question in your editor:
 
 ```sh
 qql --editor
+qql -e
 qql --editor "draft prompt"
 ```
 
