@@ -1,9 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
+use dialoguer::Editor;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use qql::app::{Clock, run};
+use qql::app::{Clock, QuestionEditor, run};
 use qql::cli::Cli;
 use qql::config::AppPaths;
 use qql::init::{DialoguerInitUi, RealModelCatalog};
@@ -19,15 +20,27 @@ impl Clock for SystemClock {
     }
 }
 
+struct DialoguerQuestionEditor;
+
+impl QuestionEditor for DialoguerQuestionEditor {
+    fn edit(&self, initial: &str) -> Result<Option<String>> {
+        let mut editor = Editor::new();
+        editor.extension(".md");
+        editor.edit(initial).map_err(Into::into)
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let paths = AppPaths::discover()?;
     let mut init_ui = DialoguerInitUi;
+    let question_editor = DialoguerQuestionEditor;
     let output = run(
         cli,
         &paths,
         &RealProviderFactory,
         &SystemClock,
+        &question_editor,
         &mut init_ui,
         &RealModelCatalog,
     )?;

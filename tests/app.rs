@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Result, anyhow};
-use qql::app::{Clock, run};
+use qql::app::{Clock, QuestionEditor, run};
 use qql::cli::{Cli, Command};
 use qql::config::{AppPaths, Config, ProviderKind, ResolvedProviderConfig};
 use qql::history::HistoryEntry;
@@ -14,14 +14,25 @@ use tempfile::tempdir;
 
 #[derive(Default)]
 struct MockFactory {
-    answers: Mutex<HashMap<ProviderKind, String>>,
+    responses: Mutex<HashMap<ProviderKind, MockResponse>>,
     build_log: Mutex<Vec<(ProviderKind, ResolvedProviderConfig)>>,
     ask_count: Arc<AtomicUsize>,
 }
 
 impl MockFactory {
     fn with_answer(self, kind: ProviderKind, answer: &str) -> Self {
-        self.answers.lock().unwrap().insert(kind, answer.to_owned());
+        self.responses
+            .lock()
+            .unwrap()
+            .insert(kind, MockResponse::Answer(answer.to_owned()));
+        self
+    }
+
+    fn with_error(self, kind: ProviderKind, error: &str) -> Self {
+        self.responses
+            .lock()
+            .unwrap()
+            .insert(kind, MockResponse::Error(error.to_owned()));
         self
     }
 
@@ -34,15 +45,24 @@ impl MockFactory {
     }
 }
 
+#[derive(Clone)]
+enum MockResponse {
+    Answer(String),
+    Error(String),
+}
+
 struct MockProvider {
-    answer: String,
+    response: MockResponse,
     ask_count: Arc<AtomicUsize>,
 }
 
 impl Provider for MockProvider {
     fn ask(&self, _question: &str) -> Result<String> {
         self.ask_count.fetch_add(1, Ordering::SeqCst);
-        Ok(self.answer.clone())
+        match &self.response {
+            MockResponse::Answer(answer) => Ok(answer.clone()),
+            MockResponse::Error(error) => Err(anyhow!(error.clone())),
+        }
     }
 }
 
@@ -53,15 +73,15 @@ impl ProviderFactory for MockFactory {
         config: &ResolvedProviderConfig,
     ) -> Result<Arc<dyn Provider>> {
         self.build_log.lock().unwrap().push((kind, config.clone()));
-        let answer = self
-            .answers
+        let response = self
+            .responses
             .lock()
             .unwrap()
             .get(&kind)
             .cloned()
-            .ok_or_else(|| anyhow!("missing mock answer"))?;
+            .ok_or_else(|| anyhow!("missing mock response"))?;
         Ok(Arc::new(MockProvider {
-            answer,
+            response,
             ask_count: Arc::clone(&self.ask_count),
         }))
     }
@@ -108,6 +128,39 @@ struct NoopModelCatalog;
 impl ModelCatalog for NoopModelCatalog {
     fn list_models(&self, _provider: ProviderKind, _api_key: &str) -> Result<Vec<String>> {
         unreachable!("model catalog should not be used in this test")
+    }
+}
+
+struct NoopQuestionEditor;
+
+impl QuestionEditor for NoopQuestionEditor {
+    fn edit(&self, _initial: &str) -> Result<Option<String>> {
+        unreachable!("question editor should not be used in this test")
+    }
+}
+
+struct StubQuestionEditor {
+    response: Option<String>,
+    calls: Mutex<Vec<String>>,
+}
+
+impl StubQuestionEditor {
+    fn returns(response: Option<&str>) -> Self {
+        Self {
+            response: response.map(|value| value.to_owned()),
+            calls: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+impl QuestionEditor for StubQuestionEditor {
+    fn edit(&self, initial: &str) -> Result<Option<String>> {
+        self.calls.lock().unwrap().push(initial.to_owned());
+        Ok(self.response.clone())
     }
 }
 
@@ -262,11 +315,13 @@ fn uses_default_provider_and_persists_history() {
             command: None,
             question: Some("what is LLM?".to_owned()),
             providers: vec![],
+            editor: false,
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )
@@ -323,11 +378,13 @@ fn emits_json_for_multiple_providers() {
             command: None,
             question: Some("what is LLM?".to_owned()),
             providers: vec![],
+            editor: false,
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )
@@ -353,6 +410,97 @@ fn emits_json_for_multiple_providers() {
 }
 
 #[test]
+fn partial_provider_failure_returns_successful_answers_and_persists_only_successful_providers() {
+    let dir = tempdir().unwrap();
+    let mut init_ui = NoopInitUi;
+    let model_catalog = NoopModelCatalog;
+    write_config(
+        dir.path(),
+        r#"{
+          "default_providers": ["openai", "claude"],
+          "providers": {
+            "openai": { "api_key": "openai-key" },
+            "claude": { "api_key": "claude-key" }
+          }
+        }"#,
+    );
+
+    let factory = MockFactory::default()
+        .with_answer(ProviderKind::Openai, "OpenAI answer")
+        .with_error(ProviderKind::Claude, "529 overloaded");
+    let output = run(
+        Cli {
+            command: None,
+            question: Some("what is LLM?".to_owned()),
+            providers: vec![],
+            editor: false,
+            last: false,
+        },
+        &AppPaths::from_base_dir(dir.path()),
+        &factory,
+        &FixedClock,
+        &NoopQuestionEditor,
+        &mut init_ui,
+        &model_catalog,
+    )
+    .unwrap();
+
+    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    assert_eq!(
+        parsed,
+        BTreeMap::from([("openai".to_owned(), "OpenAI answer".to_owned())])
+    );
+    assert_eq!(factory.ask_count(), 2);
+
+    let history = read_history(dir.path());
+    assert_eq!(history.answer, parsed);
+    assert_eq!(history.providers, vec![ProviderKind::Openai]);
+}
+
+#[test]
+fn all_provider_failures_return_detailed_error_and_do_not_persist_history() {
+    let dir = tempdir().unwrap();
+    let mut init_ui = NoopInitUi;
+    let model_catalog = NoopModelCatalog;
+    write_config(
+        dir.path(),
+        r#"{
+          "default_providers": ["openai", "claude"],
+          "providers": {
+            "openai": { "api_key": "openai-key" },
+            "claude": { "api_key": "claude-key" }
+          }
+        }"#,
+    );
+
+    let factory = MockFactory::default()
+        .with_error(ProviderKind::Openai, "timeout")
+        .with_error(ProviderKind::Claude, "529 overloaded");
+    let error = run(
+        Cli {
+            command: None,
+            question: Some("what is LLM?".to_owned()),
+            providers: vec![],
+            editor: false,
+            last: false,
+        },
+        &AppPaths::from_base_dir(dir.path()),
+        &factory,
+        &FixedClock,
+        &NoopQuestionEditor,
+        &mut init_ui,
+        &model_catalog,
+    )
+    .unwrap_err();
+
+    let message = error.to_string();
+    assert!(message.contains("all providers failed"));
+    assert!(message.contains("openai failed: timeout"));
+    assert!(message.contains("claude failed: 529 overloaded"));
+    assert!(!dir.path().join("history.json").exists());
+}
+
+#[test]
 fn provider_flag_overrides_default_providers() {
     let dir = tempdir().unwrap();
     let mut init_ui = NoopInitUi;
@@ -374,11 +522,13 @@ fn provider_flag_overrides_default_providers() {
             command: None,
             question: Some("what is LLM?".to_owned()),
             providers: vec![ProviderKind::Gemini],
+            editor: false,
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )
@@ -426,11 +576,13 @@ fn last_reads_history_without_calling_provider() {
             command: None,
             question: None,
             providers: vec![],
+            editor: false,
             last: true,
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )
@@ -441,6 +593,88 @@ fn last_reads_history_without_calling_provider() {
         parsed,
         BTreeMap::from([("openai".to_owned(), "LLM is ...".to_owned())])
     );
+    assert_eq!(factory.build_log().len(), 0);
+}
+
+#[test]
+fn editor_uses_edited_question_and_persists_it_to_history() {
+    let dir = tempdir().unwrap();
+    let mut init_ui = NoopInitUi;
+    let model_catalog = NoopModelCatalog;
+    let question_editor =
+        StubQuestionEditor::returns(Some("what is retrieval augmented generation?"));
+    write_config(
+        dir.path(),
+        r#"{
+          "default_providers": ["openai"],
+          "providers": {
+            "openai": { "api_key": "openai-key" }
+          }
+        }"#,
+    );
+
+    let factory = MockFactory::default().with_answer(
+        ProviderKind::Openai,
+        "RAG combines retrieval with generation.",
+    );
+    let output = run(
+        Cli {
+            command: None,
+            question: Some("draft prompt".to_owned()),
+            providers: vec![],
+            editor: true,
+            last: false,
+        },
+        &AppPaths::from_base_dir(dir.path()),
+        &factory,
+        &FixedClock,
+        &question_editor,
+        &mut init_ui,
+        &model_catalog,
+    )
+    .unwrap();
+
+    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    assert_eq!(
+        parsed,
+        BTreeMap::from([(
+            "openai".to_owned(),
+            "RAG combines retrieval with generation.".to_owned()
+        )])
+    );
+    assert_eq!(question_editor.calls(), vec!["draft prompt".to_owned()]);
+
+    let history = read_history(dir.path());
+    assert_eq!(history.question, "what is retrieval augmented generation?");
+}
+
+#[test]
+fn editor_requires_non_empty_question() {
+    let dir = tempdir().unwrap();
+    let mut init_ui = NoopInitUi;
+    let model_catalog = NoopModelCatalog;
+    let question_editor = StubQuestionEditor::returns(None);
+    let factory = MockFactory::default();
+
+    let error = run(
+        Cli {
+            command: None,
+            question: Some("draft prompt".to_owned()),
+            providers: vec![],
+            editor: true,
+            last: false,
+        },
+        &AppPaths::from_base_dir(dir.path()),
+        &factory,
+        &FixedClock,
+        &question_editor,
+        &mut init_ui,
+        &model_catalog,
+    )
+    .unwrap_err();
+
+    assert_eq!(error.to_string(), "editor did not return a question");
+    assert_eq!(question_editor.calls(), vec!["draft prompt".to_owned()]);
     assert_eq!(factory.build_log().len(), 0);
 }
 
@@ -456,11 +690,13 @@ fn missing_config_suggests_running_init() {
             command: None,
             question: Some("what is LLM?".to_owned()),
             providers: vec![],
+            editor: false,
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )
@@ -498,12 +734,14 @@ fn init_interactively_creates_config_for_selected_providers() {
         Cli {
             question: None,
             providers: vec![],
+            editor: false,
             last: false,
             command: Some(Command::Init),
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )
@@ -596,12 +834,14 @@ fn init_overwrites_existing_config_when_confirmed() {
         Cli {
             question: None,
             providers: vec![],
+            editor: false,
             last: false,
             command: Some(Command::Init),
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )
@@ -636,12 +876,14 @@ fn init_aborts_when_overwrite_is_rejected() {
         Cli {
             question: None,
             providers: vec![],
+            editor: false,
             last: false,
             command: Some(Command::Init),
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )
@@ -671,11 +913,13 @@ fn init_accepts_custom_model_selection() {
             command: Some(Command::Init),
             question: None,
             providers: vec![],
+            editor: false,
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )
@@ -713,11 +957,13 @@ fn init_falls_back_to_static_models_when_fetch_fails() {
             command: Some(Command::Init),
             question: None,
             providers: vec![],
+            editor: false,
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
         &factory,
         &FixedClock,
+        &NoopQuestionEditor,
         &mut init_ui,
         &model_catalog,
     )

@@ -10,11 +10,47 @@ pub trait Clock {
     fn now_rfc3339(&self) -> String;
 }
 
+pub trait QuestionEditor {
+    fn edit(&self, initial: &str) -> Result<Option<String>>;
+}
+
+fn format_provider_failure(name: &str, err: &anyhow::Error) -> String {
+    format!("{name} failed: {err}")
+}
+
+fn all_providers_failed_error(errors: &[(String, anyhow::Error)]) -> anyhow::Error {
+    let details = errors
+        .iter()
+        .map(|(name, err)| format_provider_failure(name, err))
+        .collect::<Vec<_>>()
+        .join("; ");
+    anyhow!("all providers failed: {details}")
+}
+
+fn resolve_question(cli: &Cli, editor: &dyn QuestionEditor) -> Result<String> {
+    if cli.editor {
+        let initial = cli.question.as_deref().unwrap_or_default();
+        let question = editor
+            .edit(initial)?
+            .ok_or_else(|| anyhow!("editor did not return a question"))?;
+        if question.trim().is_empty() {
+            return Err(anyhow!("question cannot be empty"));
+        }
+        return Ok(question);
+    }
+
+    cli.question
+        .clone()
+        .filter(|question| !question.trim().is_empty())
+        .ok_or_else(|| anyhow!("question is required unless --last is used"))
+}
+
 pub fn run(
     cli: Cli,
     paths: &AppPaths,
     factory: &dyn ProviderFactory,
     clock: &dyn Clock,
+    editor: &dyn QuestionEditor,
     init_ui: &mut dyn InitUi,
     model_catalog: &dyn ModelCatalog,
 ) -> Result<String> {
@@ -26,10 +62,7 @@ pub fn run(
         return render_answer(&load_history(&paths.history_path)?.answer);
     }
 
-    let question = cli
-        .question
-        .filter(|question| !question.trim().is_empty())
-        .ok_or_else(|| anyhow!("question is required unless --last is used"))?;
+    let question = resolve_question(&cli, editor)?;
     let config = crate::config::Config::load_from_path(&paths.config_path)?;
     let providers_to_use = config.providers_to_use(&cli.providers)?;
 
@@ -39,16 +72,56 @@ pub fn run(
         providers.push((*kind, factory.build(*kind, &provider_config)?));
     }
 
-    let answer = ask_providers(&question, providers)?;
+    let result = ask_providers(&question, providers)?;
+    for (name, err) in &result.errors {
+        eprintln!("Error: {}", format_provider_failure(name, err));
+    }
+    if result.answers.is_empty() {
+        return Err(all_providers_failed_error(&result.errors));
+    }
+    let succeeded_providers = providers_to_use
+        .into_iter()
+        .filter(|kind| result.answers.contains_key(kind.as_str()))
+        .collect();
     save_history(
         &paths.history_path,
         &HistoryEntry {
             question,
-            answer: answer.clone(),
-            providers: providers_to_use,
+            answer: result.answers.clone(),
+            providers: succeeded_providers,
             timestamp: clock.now_rfc3339(),
         },
     )?;
 
-    render_answer(&answer)
+    render_answer(&result.answers)
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::anyhow;
+
+    use super::{all_providers_failed_error, format_provider_failure};
+
+    #[test]
+    fn formats_provider_failure_with_provider_name() {
+        let error = anyhow!("rate limited");
+
+        assert_eq!(
+            format_provider_failure("claude", &error),
+            "claude failed: rate limited"
+        );
+    }
+
+    #[test]
+    fn all_failed_error_includes_each_provider_failure() {
+        let error = all_providers_failed_error(&[
+            ("openai".to_owned(), anyhow!("timeout")),
+            ("claude".to_owned(), anyhow!("529 overloaded")),
+        ]);
+
+        let message = error.to_string();
+        assert!(message.contains("all providers failed"));
+        assert!(message.contains("openai failed: timeout"));
+        assert!(message.contains("claude failed: 529 overloaded"));
+    }
 }

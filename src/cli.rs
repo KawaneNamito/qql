@@ -13,7 +13,10 @@ pub struct Cli {
     #[arg(short, long = "provider")]
     pub providers: Vec<ProviderKind>,
 
-    #[arg(long)]
+    #[arg(short = 'e', long, conflicts_with = "last")]
+    pub editor: bool,
+
+    #[arg(long, conflicts_with = "editor")]
     pub last: bool,
 }
 

@@ -22,20 +22,17 @@ pub trait ProviderFactory {
     ) -> Result<Arc<dyn Provider>>;
 }
 
+pub struct AskResult {
+    pub answers: AnswerPayload,
+    pub errors: Vec<(String, anyhow::Error)>,
+}
+
 pub fn ask_providers(
     question: &str,
     providers: Vec<(ProviderKind, Arc<dyn Provider>)>,
-) -> Result<AnswerPayload> {
+) -> Result<AskResult> {
     if providers.is_empty() {
         return Err(anyhow!("no providers selected"));
-    }
-
-    if providers.len() == 1 {
-        let (kind, provider) = providers.into_iter().next().expect("checked len");
-        return Ok(BTreeMap::from([(
-            kind.as_str().to_owned(),
-            provider.ask(question)?,
-        )]));
     }
 
     let mut handles = Vec::new();
@@ -48,14 +45,23 @@ pub fn ask_providers(
     }
 
     let mut answers = BTreeMap::new();
+    let mut errors = Vec::new();
     for (kind, handle) in handles {
-        let answer = handle
+        match handle
             .join()
-            .map_err(|_| anyhow!("provider `{}` thread panicked", kind.as_str()))??;
-        answers.insert(kind.as_str().to_owned(), answer);
+            .map_err(|_| anyhow!("provider `{}` thread panicked", kind.as_str()))
+            .and_then(|r| r)
+        {
+            Ok(answer) => {
+                answers.insert(kind.as_str().to_owned(), answer);
+            }
+            Err(e) => {
+                errors.push((kind.as_str().to_owned(), e));
+            }
+        }
     }
 
-    Ok(answers)
+    Ok(AskResult { answers, errors })
 }
 
 pub struct RealProviderFactory;

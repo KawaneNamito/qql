@@ -59,11 +59,20 @@ qql -p claude "what is LLM?"
 qql -p openai -p gemini "what is LLM?"
 ```
 
+Compose the question in your editor:
+
+```sh
+qql --editor
+qql --editor "draft prompt"
+```
+
 Replay the most recent answer:
 
 ```sh
 qql --last
 ```
+
+`--editor` opens `$VISUAL`, then `$EDITOR`, and falls back to `vi` if neither is set. If you pass a positional argument with `--editor`, it is used as the initial draft text.
 
 ## Output
 
@@ -105,6 +114,7 @@ Add it to `~/.zshrc` or `~/.bashrc`, reload your shell, and use:
 ```sh
 qq "what is LLM?"
 qq -p openai -p claude "what is LLM?"
+qq --editor
 qq --last
 ```
 
