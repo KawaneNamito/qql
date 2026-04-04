@@ -66,6 +66,13 @@ qql --editor
 qql --editor "draft prompt"
 ```
 
+Read the question from standard input:
+
+```sh
+cat prompt.md | qql --stdin
+printf 'summarize this diff\n' | qql -
+```
+
 Replay the most recent answer:
 
 ```sh
@@ -73,6 +80,7 @@ qql --last
 ```
 
 `--editor` opens `$VISUAL`, then `$EDITOR`, and falls back to `vi` if neither is set. If you pass a positional argument with `--editor`, it is used as the initial draft text.
+`--stdin` reads the question from standard input explicitly. `qql -` is a short alias for the same behavior.
 
 ## Output
 
@@ -115,6 +123,7 @@ Add it to `~/.zshrc` or `~/.bashrc`, reload your shell, and use:
 qq "what is LLM?"
 qq -p openai -p claude "what is LLM?"
 qq --editor
+qq --stdin < prompt.md
 qq --last
 ```
 

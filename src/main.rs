@@ -1,10 +1,12 @@
+use std::io::Read;
+
 use anyhow::Result;
 use clap::Parser;
 use dialoguer::Editor;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use qql::app::{Clock, QuestionEditor, run};
+use qql::app::{Clock, QuestionEditor, QuestionStdin, run};
 use qql::cli::Cli;
 use qql::config::AppPaths;
 use qql::init::{DialoguerInitUi, RealModelCatalog};
@@ -30,17 +32,29 @@ impl QuestionEditor for DialoguerQuestionEditor {
     }
 }
 
+struct RealQuestionStdin;
+
+impl QuestionStdin for RealQuestionStdin {
+    fn read_to_string(&self) -> Result<String> {
+        let mut question = String::new();
+        std::io::stdin().read_to_string(&mut question)?;
+        Ok(question)
+    }
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let paths = AppPaths::discover()?;
     let mut init_ui = DialoguerInitUi;
     let question_editor = DialoguerQuestionEditor;
+    let question_stdin = RealQuestionStdin;
     let output = run(
         cli,
         &paths,
         &RealProviderFactory,
         &SystemClock,
         &question_editor,
+        &question_stdin,
         &mut init_ui,
         &RealModelCatalog,
     )?;

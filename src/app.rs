@@ -14,6 +14,10 @@ pub trait QuestionEditor {
     fn edit(&self, initial: &str) -> Result<Option<String>>;
 }
 
+pub trait QuestionStdin {
+    fn read_to_string(&self) -> Result<String>;
+}
+
 fn format_provider_failure(name: &str, err: &anyhow::Error) -> String {
     format!("{name} failed: {err}")
 }
@@ -27,7 +31,23 @@ fn all_providers_failed_error(errors: &[(String, anyhow::Error)]) -> anyhow::Err
     anyhow!("all providers failed: {details}")
 }
 
-fn resolve_question(cli: &Cli, editor: &dyn QuestionEditor) -> Result<String> {
+fn normalize_question(text: String) -> String {
+    text.trim_end_matches(&['\n', '\r'][..]).to_owned()
+}
+
+fn read_question_from_stdin(stdin: &dyn QuestionStdin) -> Result<String> {
+    let question = normalize_question(stdin.read_to_string()?);
+    if question.trim().is_empty() {
+        return Err(anyhow!("stdin did not contain a question"));
+    }
+    Ok(question)
+}
+
+fn resolve_question(
+    cli: &Cli,
+    editor: &dyn QuestionEditor,
+    stdin: &dyn QuestionStdin,
+) -> Result<String> {
     if cli.editor {
         let initial = cli.question.as_deref().unwrap_or_default();
         let question = editor
@@ -37,6 +57,10 @@ fn resolve_question(cli: &Cli, editor: &dyn QuestionEditor) -> Result<String> {
             return Err(anyhow!("question cannot be empty"));
         }
         return Ok(question);
+    }
+
+    if cli.stdin || cli.question.as_deref() == Some("-") {
+        return read_question_from_stdin(stdin);
     }
 
     cli.question
@@ -51,6 +75,7 @@ pub fn run(
     factory: &dyn ProviderFactory,
     clock: &dyn Clock,
     editor: &dyn QuestionEditor,
+    stdin: &dyn QuestionStdin,
     init_ui: &mut dyn InitUi,
     model_catalog: &dyn ModelCatalog,
 ) -> Result<String> {
@@ -62,7 +87,7 @@ pub fn run(
         return render_answer(&load_history(&paths.history_path)?.answer);
     }
 
-    let question = resolve_question(&cli, editor)?;
+    let question = resolve_question(&cli, editor, stdin)?;
     let config = crate::config::Config::load_from_path(&paths.config_path)?;
     let providers_to_use = config.providers_to_use(&cli.providers)?;
 
