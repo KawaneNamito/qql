@@ -6,6 +6,15 @@ use crate::history::{HistoryEntry, load_history, render_answer, save_history};
 use crate::init::{InitUi, ModelCatalog, run_init};
 use crate::provider::{ProviderFactory, ask_providers};
 
+pub struct AppDeps<'a> {
+    pub factory: &'a dyn ProviderFactory,
+    pub clock: &'a dyn Clock,
+    pub editor: &'a dyn QuestionEditor,
+    pub stdin: &'a dyn QuestionStdin,
+    pub init_ui: &'a mut dyn InitUi,
+    pub model_catalog: &'a dyn ModelCatalog,
+}
+
 pub trait Clock {
     fn now_rfc3339(&self) -> String;
 }
@@ -69,16 +78,15 @@ fn resolve_question(
         .ok_or_else(|| anyhow!("question is required unless --last is used"))
 }
 
-pub fn run(
-    cli: Cli,
-    paths: &AppPaths,
-    factory: &dyn ProviderFactory,
-    clock: &dyn Clock,
-    editor: &dyn QuestionEditor,
-    stdin: &dyn QuestionStdin,
-    init_ui: &mut dyn InitUi,
-    model_catalog: &dyn ModelCatalog,
-) -> Result<String> {
+pub fn run(cli: Cli, paths: &AppPaths, deps: AppDeps<'_>) -> Result<String> {
+    let AppDeps {
+        factory,
+        clock,
+        editor,
+        stdin,
+        init_ui,
+        model_catalog,
+    } = deps;
     if cli.command == Some(Command::Init) {
         return run_init(&paths.config_path, init_ui, model_catalog);
     }

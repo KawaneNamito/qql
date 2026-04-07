@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use qql::app::{Clock, QuestionEditor, QuestionStdin, run};
+use qql::app::{AppDeps, Clock, QuestionEditor, QuestionStdin, run};
 use qql::cli::{Cli, Command};
 use qql::config::{AppPaths, Config, ProviderKind, ResolvedProviderConfig};
 use qql::history::HistoryEntry;
@@ -354,12 +354,7 @@ fn uses_default_provider_and_persists_history() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -419,12 +414,7 @@ fn emits_json_for_multiple_providers() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -476,12 +466,7 @@ fn partial_provider_failure_returns_successful_answers_and_persists_only_success
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -526,12 +511,7 @@ fn all_provider_failures_return_detailed_error_and_do_not_persist_history() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap_err();
 
@@ -569,12 +549,7 @@ fn provider_flag_overrides_default_providers() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -625,12 +600,7 @@ fn last_reads_history_without_calling_provider() {
             last: true,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -673,12 +643,7 @@ fn editor_uses_edited_question_and_persists_it_to_history() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &question_editor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &question_editor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -714,12 +679,7 @@ fn editor_requires_non_empty_question() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &question_editor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &question_editor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap_err();
 
@@ -758,12 +718,7 @@ fn stdin_reads_question_and_persists_it_to_history() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &question_stdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &question_stdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -808,12 +763,7 @@ fn dash_argument_reads_question_from_stdin() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &question_stdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &question_stdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -846,12 +796,7 @@ fn stdin_requires_non_empty_question() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &question_stdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &question_stdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap_err();
 
@@ -884,12 +829,7 @@ fn missing_config_suggests_running_init() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap_err();
 
@@ -931,12 +871,7 @@ fn init_interactively_creates_config_for_selected_providers() {
             command: Some(Command::Init),
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -1033,12 +968,7 @@ fn init_overwrites_existing_config_when_confirmed() {
             command: Some(Command::Init),
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -1077,12 +1007,7 @@ fn init_aborts_when_overwrite_is_rejected() {
             command: Some(Command::Init),
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap_err();
 
@@ -1115,12 +1040,7 @@ fn init_accepts_custom_model_selection() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 
@@ -1161,12 +1081,7 @@ fn init_falls_back_to_static_models_when_fetch_fails() {
             last: false,
         },
         &AppPaths::from_base_dir(dir.path()),
-        &factory,
-        &FixedClock,
-        &NoopQuestionEditor,
-        &NoopQuestionStdin,
-        &mut init_ui,
-        &model_catalog,
+        AppDeps { factory: &factory, clock: &FixedClock, editor: &NoopQuestionEditor, stdin: &NoopQuestionStdin, init_ui: &mut init_ui, model_catalog: &model_catalog },
     )
     .unwrap();
 

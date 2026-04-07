@@ -6,7 +6,7 @@ use dialoguer::Editor;
 use time::OffsetDateTime;
 use time::format_description::well_known::Rfc3339;
 
-use qql::app::{Clock, QuestionEditor, QuestionStdin, run};
+use qql::app::{AppDeps, Clock, QuestionEditor, QuestionStdin, run};
 use qql::cli::Cli;
 use qql::config::AppPaths;
 use qql::init::{DialoguerInitUi, RealModelCatalog};
@@ -51,12 +51,14 @@ fn main() -> Result<()> {
     let output = run(
         cli,
         &paths,
-        &RealProviderFactory,
-        &SystemClock,
-        &question_editor,
-        &question_stdin,
-        &mut init_ui,
-        &RealModelCatalog,
+        AppDeps {
+            factory: &RealProviderFactory,
+            clock: &SystemClock,
+            editor: &question_editor,
+            stdin: &question_stdin,
+            init_ui: &mut init_ui,
+            model_catalog: &RealModelCatalog,
+        },
     )?;
     println!("{output}");
     Ok(())
