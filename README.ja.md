@@ -93,7 +93,18 @@ JSON 出力を見やすく表示したい場合は、`qql` をラップする `q
 ```sh
 qq() {
   local output markdown
-  output="$(qql "$@")" || return $?
+
+  if [ $# -eq 0 ]; then
+    local tmp question
+    tmp="$(mktemp)" || return 1
+    "${VISUAL:-${EDITOR:-vi}}" "$tmp" </dev/tty >/dev/tty || { rm -f "$tmp"; return 1; }
+    question="$(cat "$tmp")"
+    rm -f "$tmp"
+    [ -n "$(printf '%s' "$question" | tr -d '[:space:]')" ] || return 1
+    output="$(qql "$question")" || return $?
+  else
+    output="$(qql "$@")" || return $?
+  fi
 
   if printf '%s' "$output" | jq -e 'type == "object"' >/dev/null 2>&1; then
     markdown="$(
@@ -115,11 +126,13 @@ qq() {
 この関数を `~/.zshrc` や `~/.bashrc` に追加してシェルを読み直すと、次のように使えます。
 
 ```sh
+qq                # エディタで質問を作成して送信
 qq "what is LLM?"
 qq -p openai -p claude "what is LLM?"
+qq --editor
+qq --stdin < prompt.md
 qq --last
 ```
-
 複数 provider の場合でも `glow` は 1 回だけ起動するため、1 つの画面で連続スクロールしながら比較できます。
 
 ## 設定ファイル

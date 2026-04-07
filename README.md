@@ -99,7 +99,18 @@ If you want prettier terminal output, wrap `qql` with a `qq` shell function:
 ```sh
 qq() {
   local output markdown
-  output="$(qql "$@")" || return $?
+
+  if [ $# -eq 0 ]; then
+    local tmp question
+    tmp="$(mktemp)" || return 1
+    "${VISUAL:-${EDITOR:-vi}}" "$tmp" </dev/tty >/dev/tty || { rm -f "$tmp"; return 1; }
+    question="$(cat "$tmp")"
+    rm -f "$tmp"
+    [ -n "$(printf '%s' "$question" | tr -d '[:space:]')" ] || return 1
+    output="$(qql "$question")" || return $?
+  else
+    output="$(qql "$@")" || return $?
+  fi
 
   if printf '%s' "$output" | jq -e 'type == "object"' >/dev/null 2>&1; then
     markdown="$(
@@ -118,30 +129,14 @@ qq() {
 }
 ```
 
-If you want to compose the question in your editor before passing it through `qq`, add a separate `qqe` helper:
-
-```sh
-qqe() {
-  local tmp editor question
-  tmp="$(mktemp)" || return 1
-  editor="${VISUAL:-${EDITOR:-vi}}"
-  "$editor" "$tmp" || { rm -f "$tmp"; return 1; }
-  question="$(cat "$tmp")"
-  rm -f "$tmp"
-
-  [ -n "$(printf '%s' "$question" | tr -d '[:space:]')" ] || return 1
-  qq "$question"
-}
-```
-
 Add it to `~/.zshrc` or `~/.bashrc`, reload your shell, and use:
 
 ```sh
+qq                # open editor to compose question
 qq "what is LLM?"
 qq -p openai -p claude "what is LLM?"
 qq --editor
 qq --stdin < prompt.md
-qqe
 qq --last
 ```
 
