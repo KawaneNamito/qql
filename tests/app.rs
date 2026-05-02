@@ -8,7 +8,7 @@ use clap::Parser;
 use qql::app::{AppDeps, Clock, QuestionEditor, QuestionStdin, run};
 use qql::cli::{Cli, Command};
 use qql::config::{AppPaths, Config, ProviderKind, ResolvedProviderConfig};
-use qql::history::HistoryEntry;
+use qql::history::{HistoryEntry, OutputPayload};
 use qql::init::{InitUi, ModelCatalog, ModelSelection};
 use qql::provider::{Provider, ProviderFactory};
 use tempfile::tempdir;
@@ -327,6 +327,10 @@ fn read_history(dir: &std::path::Path) -> HistoryEntry {
     serde_json::from_str(&fs::read_to_string(dir.join("history.json")).unwrap()).unwrap()
 }
 
+fn parse_output(output: &str) -> OutputPayload {
+    serde_json::from_str(output).unwrap()
+}
+
 #[test]
 fn uses_default_provider_and_persists_history() {
     let dir = tempdir().unwrap();
@@ -358,13 +362,16 @@ fn uses_default_provider_and_persists_history() {
     )
     .unwrap();
 
-    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    let parsed = parse_output(&output);
     assert_eq!(
         parsed,
-        BTreeMap::from([(
-            "claude".to_owned(),
-            "LLM stands for large language model.".to_owned()
-        )])
+        OutputPayload {
+            prompt: "what is LLM?".to_owned(),
+            answers: BTreeMap::from([(
+                "claude".to_owned(),
+                "LLM stands for large language model.".to_owned()
+            )]),
+        }
     );
     assert_eq!(
         factory.build_log(),
@@ -380,7 +387,7 @@ fn uses_default_provider_and_persists_history() {
 
     let history = read_history(dir.path());
     assert_eq!(history.question, "what is LLM?");
-    assert_eq!(history.answer, parsed);
+    assert_eq!(history.answer, parsed.answers);
     assert_eq!(history.providers, vec![ProviderKind::Claude]);
     assert_eq!(history.timestamp, "2026-04-03T12:00:00Z");
 }
@@ -418,23 +425,26 @@ fn emits_json_for_multiple_providers() {
     )
     .unwrap();
 
-    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    let parsed = parse_output(&output);
     assert_eq!(
         parsed,
-        BTreeMap::from([
-            (
-                "claude".to_owned(),
-                "LLM stands for large language model.".to_owned()
-            ),
-            (
-                "openai".to_owned(),
-                "LLM is a machine learning model.".to_owned()
-            ),
-        ])
+        OutputPayload {
+            prompt: "what is LLM?".to_owned(),
+            answers: BTreeMap::from([
+                (
+                    "claude".to_owned(),
+                    "LLM stands for large language model.".to_owned()
+                ),
+                (
+                    "openai".to_owned(),
+                    "LLM is a machine learning model.".to_owned()
+                ),
+            ]),
+        }
     );
 
     let history = read_history(dir.path());
-    assert_eq!(history.answer, parsed);
+    assert_eq!(history.answer, parsed.answers);
 }
 
 #[test]
@@ -470,15 +480,18 @@ fn partial_provider_failure_returns_successful_answers_and_persists_only_success
     )
     .unwrap();
 
-    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    let parsed = parse_output(&output);
     assert_eq!(
         parsed,
-        BTreeMap::from([("openai".to_owned(), "OpenAI answer".to_owned())])
+        OutputPayload {
+            prompt: "what is LLM?".to_owned(),
+            answers: BTreeMap::from([("openai".to_owned(), "OpenAI answer".to_owned())]),
+        }
     );
     assert_eq!(factory.ask_count(), 2);
 
     let history = read_history(dir.path());
-    assert_eq!(history.answer, parsed);
+    assert_eq!(history.answer, parsed.answers);
     assert_eq!(history.providers, vec![ProviderKind::Openai]);
 }
 
@@ -553,10 +566,13 @@ fn provider_flag_overrides_default_providers() {
     )
     .unwrap();
 
-    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    let parsed = parse_output(&output);
     assert_eq!(
         parsed,
-        BTreeMap::from([("gemini".to_owned(), "Gemini answer".to_owned())])
+        OutputPayload {
+            prompt: "what is LLM?".to_owned(),
+            answers: BTreeMap::from([("gemini".to_owned(), "Gemini answer".to_owned())]),
+        }
     );
     assert_eq!(factory.build_log().len(), 1);
     assert_eq!(factory.build_log()[0].0, ProviderKind::Gemini);
@@ -604,10 +620,13 @@ fn last_reads_history_without_calling_provider() {
     )
     .unwrap();
 
-    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    let parsed = parse_output(&output);
     assert_eq!(
         parsed,
-        BTreeMap::from([("openai".to_owned(), "LLM is ...".to_owned())])
+        OutputPayload {
+            prompt: "what is LLM?".to_owned(),
+            answers: BTreeMap::from([("openai".to_owned(), "LLM is ...".to_owned())]),
+        }
     );
     assert_eq!(factory.build_log().len(), 0);
 }
@@ -647,13 +666,16 @@ fn editor_uses_edited_question_and_persists_it_to_history() {
     )
     .unwrap();
 
-    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    let parsed = parse_output(&output);
     assert_eq!(
         parsed,
-        BTreeMap::from([(
-            "openai".to_owned(),
-            "RAG combines retrieval with generation.".to_owned()
-        )])
+        OutputPayload {
+            prompt: "what is retrieval augmented generation?".to_owned(),
+            answers: BTreeMap::from([(
+                "openai".to_owned(),
+                "RAG combines retrieval with generation.".to_owned()
+            )]),
+        }
     );
     assert_eq!(question_editor.calls(), vec!["draft prompt".to_owned()]);
 
@@ -722,13 +744,16 @@ fn stdin_reads_question_and_persists_it_to_history() {
     )
     .unwrap();
 
-    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    let parsed = parse_output(&output);
     assert_eq!(
         parsed,
-        BTreeMap::from([(
-            "openai".to_owned(),
-            "RAG combines retrieval with generation.".to_owned()
-        )])
+        OutputPayload {
+            prompt: "what is retrieval augmented generation?".to_owned(),
+            answers: BTreeMap::from([(
+                "openai".to_owned(),
+                "RAG combines retrieval with generation.".to_owned()
+            )]),
+        }
     );
     assert_eq!(question_stdin.calls(), 1);
 
@@ -767,10 +792,13 @@ fn dash_argument_reads_question_from_stdin() {
     )
     .unwrap();
 
-    let parsed: BTreeMap<String, String> = serde_json::from_str(&output).unwrap();
+    let parsed = parse_output(&output);
     assert_eq!(
         parsed,
-        BTreeMap::from([("claude".to_owned(), "Diff summary".to_owned())])
+        OutputPayload {
+            prompt: "summarize this diff".to_owned(),
+            answers: BTreeMap::from([("claude".to_owned(), "Diff summary".to_owned())]),
+        }
     );
     assert_eq!(question_stdin.calls(), 1);
 

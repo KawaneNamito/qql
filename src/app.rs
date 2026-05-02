@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 
 use crate::cli::{Cli, Command};
 use crate::config::AppPaths;
-use crate::history::{HistoryEntry, load_history, render_answer, save_history};
+use crate::history::{HistoryEntry, load_history, render_output, save_history};
 use crate::init::{InitUi, ModelCatalog, run_init};
 use crate::provider::{ProviderFactory, ask_providers};
 
@@ -92,7 +92,8 @@ pub fn run(cli: Cli, paths: &AppPaths, deps: AppDeps<'_>) -> Result<String> {
     }
 
     if cli.last {
-        return render_answer(&load_history(&paths.history_path)?.answer);
+        let history = load_history(&paths.history_path)?;
+        return render_output(&history.question, &history.answer);
     }
 
     let question = resolve_question(&cli, editor, stdin)?;
@@ -119,14 +120,14 @@ pub fn run(cli: Cli, paths: &AppPaths, deps: AppDeps<'_>) -> Result<String> {
     save_history(
         &paths.history_path,
         &HistoryEntry {
-            question,
+            question: question.clone(),
             answer: result.answers.clone(),
             providers: succeeded_providers,
             timestamp: clock.now_rfc3339(),
         },
     )?;
 
-    render_answer(&result.answers)
+    render_output(&question, &result.answers)
 }
 
 #[cfg(test)]

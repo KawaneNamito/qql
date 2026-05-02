@@ -8,7 +8,7 @@ CLI から短い質問をすばやく LLM に投げるためのツールです�
 
 - OpenAI / Claude / Gemini を使って質問できる
 - デフォルト provider を 1 つまたは複数設定できる
-- 単一 provider / 複数 provider のどちらでも JSON 形式で出力できる
+- 元の prompt と provider ごとの回答を JSON 形式で出力できる
 - 直前の回答を `--last` で再表示できる
 - `qql init` で対話式に設定ファイルを作成できる
 
@@ -71,10 +71,11 @@ qql --last
 
 ## 出力
 
-出力は常に JSON 形式です。単一 provider の場合も provider 名を key にしたオブジェクトで返します。
+出力は常に JSON 形式です。元の質問は `prompt` に入り、各 provider の回答は provider 名を key にした形式で返します。
 
 ```json
 {
+  "prompt": "what is LLM?",
   "openai": "LLM is ...",
   "claude": "LLM stands for ..."
 }
@@ -84,6 +85,7 @@ qql --last
 
 ```json
 {
+  "prompt": "what is LLM?",
   "claude": "LLM stands for Large Language Model."
 }
 ```

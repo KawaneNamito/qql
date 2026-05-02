@@ -13,7 +13,7 @@ XDG Base Directory 仕様に従い、`$XDG_CONFIG_HOME` が設定されている
 ```jsonc
 {
   // デフォルトで使用するProvider（1つまたは複数）
-  // 出力は常に { "openai": "...", "claude": "..." } の形式になる
+  // CLI出力は常に { "prompt": "...", "openai": "...", "claude": "..." } の形式になる
   "default_providers": ["openai"],
 
   "providers": {
@@ -82,6 +82,7 @@ XDG Base Directory 仕様に従い、`$XDG_CONFIG_HOME` が設定されている
 
 ```json
 {
+  "prompt": "what is LLM?",
   "openai": "LLM is ...",
   "claude": "LLM stands for ..."
 }

@@ -18,7 +18,7 @@ Inspired by [llm](https://github.com/simonw/llm). I wanted a simpler, dependency
 
 - Ask questions with OpenAI, Claude, or Gemini
 - Configure one or more default providers
-- Always emit provider-keyed JSON, even for a single provider
+- Always emit JSON with the original prompt plus provider-keyed answers
 - Replay the last answer with `--last`
 - Create the config file interactively with `qql init`
 
@@ -85,10 +85,11 @@ qql --last
 
 ## Output
 
-Output is always JSON, keyed by provider name.
+Output is always JSON. The original prompt is included in `prompt`, and provider answers are keyed by provider name.
 
 ```json
 {
+  "prompt": "what is LLM?",
   "openai": "LLM is ...",
   "claude": "LLM stands for ..."
 }
